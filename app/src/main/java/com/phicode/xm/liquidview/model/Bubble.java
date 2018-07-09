@@ -3,7 +3,8 @@ package com.phicode.xm.liquidview.model;
 public class Bubble {
     private int size;
     private float XMiddleRatio;
-    private int v;
+    private float bounceHeight;
+    private int alpha;
 
     public int getSize() {
         return size;
@@ -21,12 +22,20 @@ public class Bubble {
         this.XMiddleRatio = XMiddleRatio;
     }
 
-    public int getV() {
-        return v;
+    public float getBounceHeight() {
+        return bounceHeight;
     }
 
-    public void setV(int v) {
-        this.v = v;
+    public void setBounceHeight(float bounceHeight) {
+        this.bounceHeight = bounceHeight;
+    }
+
+    public int getAlpha() {
+        return alpha;
+    }
+
+    public void setAlpha(int alpha) {
+        this.alpha = alpha;
     }
 
     @Override
@@ -34,7 +43,8 @@ public class Bubble {
         return "Bubble{" +
                 "size=" + size +
                 ", XMiddleRatio=" + XMiddleRatio +
-                ", v=" + v +
+                ", bounceHeight=" + bounceHeight +
+                ", alpha=" + alpha +
                 '}';
     }
 }

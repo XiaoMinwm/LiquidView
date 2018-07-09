@@ -1,16 +1,24 @@
 package com.phicode.xm.liquidview.view;
 
+import android.animation.ValueAnimator;
 import android.content.Context;
 import android.graphics.Canvas;
 import android.graphics.Color;
 import android.graphics.Paint;
 import android.graphics.Path;
 import android.graphics.RectF;
+import android.os.Handler;
+import android.os.Looper;
 import android.support.annotation.Nullable;
 import android.util.AttributeSet;
 import android.view.View;
+import android.view.animation.AccelerateDecelerateInterpolator;
 
+import com.phicode.xm.liquidview.BubbleGenerator;
+import com.phicode.xm.liquidview.model.Bubble;
 import com.phicode.xm.liquidview.util.CommonUtil;
+
+import java.util.List;
 
 public class LiquidView extends View {
     private static final String TAG = "LiquidView";
@@ -27,6 +35,8 @@ public class LiquidView extends View {
     public static final String MIDDLE_COLOR = "#FFFFD700";
     public static final String END_COLOR = "#FF1BCC48";
 
+    private static final int DEFAULT_BUBBLE_BOUNCE_HEIGHT = 100;
+
     private int mWidth;
     private int mHeight;
     private int mBigCircleHeight;
@@ -38,6 +48,7 @@ public class LiquidView extends View {
     private Paint mBigCirclePaint;
     //波浪画笔
     private Paint mWavePaint;
+    private Paint mBubblePaint;
 
     private Path mWavePath;
     private Path mBigCirclePath;
@@ -51,11 +62,18 @@ public class LiquidView extends View {
     private double mPhiDiff = 0;
     private double mLengthDiff = 0;
     private double mWaterFillRatio = 0;
+    private float mBeginX;
+    private float mBeginY;
+    private int mCurrentColor;
 
     private int mWaterFallDelta = 0;
     private int mWaterDismissDelta = 0;
 
     private LiquidState mState;
+    private List<Bubble> mBubbles;
+    private BubbleGenerator mBubbleGenerator = new BubbleGenerator();
+
+    private ValueAnimator mValueAnimator = ValueAnimator.ofFloat(0, 1);
 
     public LiquidView(Context context) {
         this(context, null);
@@ -68,6 +86,39 @@ public class LiquidView extends View {
     public LiquidView(Context context, @Nullable AttributeSet attrs, int defStyleAttr) {
         super(context, attrs, defStyleAttr);
         initPaint();
+        init();
+    }
+
+    private Handler mHandler = new Handler(Looper.myLooper());
+
+    private void init() {
+        mValueAnimator.setDuration(700);
+        mValueAnimator.setInterpolator(new AccelerateDecelerateInterpolator());
+        mValueAnimator.addUpdateListener(new ValueAnimator.AnimatorUpdateListener() {
+            @Override
+            public void onAnimationUpdate(ValueAnimator valueAnimator) {
+                float value = (float) valueAnimator.getAnimatedValue();
+                for (Bubble bubble : mBubbles) {
+                    bubble.setAlpha((int) (255 * (1 - value)));
+                    bubble.setBounceHeight(DEFAULT_BUBBLE_BOUNCE_HEIGHT * value);
+                    postInvalidate();
+                }
+            }
+        });
+
+        mBubbleGenerator.setBubbleCallback(new BubbleGenerator.BubbleCallback() {
+            @Override
+            public void generatorBubble(List<Bubble> bubbles) {
+                mBubbles = bubbles;
+                mHandler.post(new Runnable() {
+                    @Override
+                    public void run() {
+                        mValueAnimator.start();
+                    }
+                });
+            }
+        });
+        mBubbleGenerator.start();
     }
 
     /**
@@ -93,6 +144,11 @@ public class LiquidView extends View {
         mWavePaint.setStyle(Paint.Style.STROKE);
         mWavePaint.setStrokeWidth(2);
 
+        mBubblePaint = new Paint();
+        mBubblePaint.setDither(true);
+        mBubblePaint.setAntiAlias(true);
+        mBubblePaint.setStyle(Paint.Style.FILL);
+
         mWavePath = new Path();
         mBigCirclePath = new Path();
 
@@ -112,8 +168,10 @@ public class LiquidView extends View {
             case LIQUID_FILL:
                 drawWaterFall(canvas);
                 drawWave(mBigCirclePath, canvas);
+                drawBubble(canvas);
                 break;
             case WATER_DISMISS:
+                mBubbleGenerator.setRunning(false);
                 drawWave(mBigCirclePath, canvas);
                 drawWaterDismiss(canvas);
                 break;
@@ -121,6 +179,21 @@ public class LiquidView extends View {
                 break;
             case MAKE_TICK:
                 break;
+        }
+    }
+
+    private void drawBubble(Canvas canvas) {
+        if (mLength > mHeight || mLength < mHeight / 2 || mBubbles == null) {
+            return;
+        }
+        float deltaH = (float) Math.abs((mWidth / 2 - (mHeight - mLength)));
+        float bubbleRange = (float) Math.sqrt((mWidth / 2) * (mWidth / 2) - deltaH * deltaH);
+        for (Bubble bubble : mBubbles) {
+            float bubbleX = bubble.getXMiddleRatio() * bubbleRange * 1.5f + mWidth / 2;
+            float bubbleY = (float) (mAmplitude * Math.sin(mOmega * bubbleX + mPhi) + mLength);
+            mBubblePaint.setColor(mCurrentColor);
+            mBubblePaint.setAlpha(bubble.getAlpha());
+            canvas.drawCircle(bubbleX < mWidth / 2 ? (bubbleX - bubble.getBounceHeight() * 0.2f) : (bubbleX + bubble.getBounceHeight() * 0.2f), bubbleY - bubble.getBounceHeight(), bubble.getSize(), mBubblePaint);
         }
     }
 
@@ -142,8 +215,10 @@ public class LiquidView extends View {
         RectF rectF = new RectF(mWidth / 2 - WATER_WIDTH / 2, 0, mWidth / 2 + WATER_WIDTH / 2, bottom);
         if (mWaterFillRatio < 0.8) {
             mWaterFallPaint.setColor(Color.parseColor(CommonUtil.caculateColor(BEGIN_COLOR, MIDDLE_COLOR, (float) (mWaterFillRatio / 0.8))));
+            mCurrentColor = Color.parseColor(CommonUtil.caculateColor(BEGIN_COLOR, MIDDLE_COLOR, (float) (mWaterFillRatio / 0.8)));
         } else if (mWaterFillRatio <= 1.0 && mWaterFillRatio > 0.8) {
             mWaterFallPaint.setColor(Color.parseColor(CommonUtil.caculateColor(MIDDLE_COLOR, END_COLOR, (float) ((mWaterFillRatio - 0.8) / 0.2))));
+            mCurrentColor = Color.parseColor(CommonUtil.caculateColor(MIDDLE_COLOR, END_COLOR, (float) ((mWaterFillRatio - 0.8) / 0.2)));
         }
         canvas.drawRect(rectF, mWaterFallPaint);
         mWaterFallDelta += 50;
@@ -168,6 +243,7 @@ public class LiquidView extends View {
         mWavePath.reset();
         mWavePath.moveTo(0, mHeight);
         mWavePath.lineTo(0, (float) (mAmplitude * Math.sin(mOmega * 0 + mPhi) + mLength));
+        mBubbleGenerator.setGenerate(true);
         for (int beginX = 1; beginX < endX; beginX += 2) {
             float beginY = (float) (mAmplitude * Math.sin(mOmega * beginX + mPhi) + mLength);
             mWavePath.lineTo(beginX, beginY);
@@ -186,7 +262,7 @@ public class LiquidView extends View {
         mLengthDiff += mBigCircleHeight / 200.0;
         mOmegaRatio = mLengthDiff <= (mBigCircleHeight / 2.0) ? 1.4 - (0.6 * mLengthDiff / mBigCircleHeight) * 2
                 : 1.4 - (0.6 * (mBigCircleHeight - mLengthDiff) / mBigCircleHeight) * 2;
-        mPhiDiff += mOmega * 30 * (1 - (0.9 * mLengthDiff / mBigCircleHeight));
+        mPhiDiff += mOmega * 20 * (1 - (0.9 * mLengthDiff / mBigCircleHeight));
         if (mLength >= mHeight / 2.0 - mAmplitude) {
             postInvalidate();
         } else if (mState == LiquidState.LIQUID_FILL) {
