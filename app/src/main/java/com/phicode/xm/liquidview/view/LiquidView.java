@@ -10,17 +10,28 @@ import android.support.annotation.Nullable;
 import android.util.AttributeSet;
 import android.view.View;
 
+import com.phicode.xm.liquidview.util.CommonUtil;
+
 public class LiquidView extends View {
+    private static final String TAG = "LiquidView";
+    //水波正弦参数
     private static final int DEFAULT_AMPLITUDE = 10;
     private static final double DEFAULT_OMEGA_RATIO = 1;
     private static final double DEFAULT_AMPLITUDE_RATIO = 0.05;
     private static final double DEFAULT_PHI_RATIO = 0.5;
     private static final double DEFAULT_LENGTH_RATIO = 0.5;
+    //水注宽度
     private static final int WATER_WIDTH = 40;
+    //动画初始到结束颜色
+    private static final String BEGIN_COLOR = "#FFFF4500";
+    public static final String MIDDLE_COLOR = "#FFFFD700";
+    public static final String END_COLOR = "#FF1BCC48";
 
     private int mWidth;
     private int mHeight;
     private int mBigCircleHeight;
+
+    private int mColorDiff;
 
     private Paint mWaterFallPaint;
     //大圆画笔
@@ -39,9 +50,12 @@ public class LiquidView extends View {
     private double mOmegaRatio = 2;
     private double mPhiDiff = 0;
     private double mLengthDiff = 0;
+    private double mWaterFillRatio = 0;
 
     private int mWaterFallDelta = 0;
     private int mWaterDismissDelta = 0;
+
+    private LiquidState mState;
 
     public LiquidView(Context context) {
         this(context, null);
@@ -81,6 +95,8 @@ public class LiquidView extends View {
 
         mWavePath = new Path();
         mBigCirclePath = new Path();
+
+        mState = LiquidState.WATER_FALL;
     }
 
     @Override
@@ -88,43 +104,62 @@ public class LiquidView extends View {
         super.onDraw(canvas);
         mWidth = getWidth();
         mHeight = getHeight();
-        mBigCircleHeight = getHeight() / 2;
-        mBigCirclePath.reset();
-        mBigCirclePath.addCircle(mWidth / 2, 3 * mHeight / 4, mWidth / 2, Path.Direction.CW);
-        if (mLength >= -mAmplitude) {
-            drawWaterFall(canvas);
-        }
-        if (mWaterFallDelta > mHeight - 10) {
-            drawWave(mBigCirclePath, canvas);
-            if (mLength < -mAmplitude) {
-                drawWaterDismiss(canvas);
-            }
-        }
 
+        switch (mState) {
+            case WATER_FALL:
+                drawWaterFall(canvas);
+                break;
+            case LIQUID_FILL:
+                drawWaterFall(canvas);
+                drawWave(mBigCirclePath, canvas);
+                break;
+            case WATER_DISMISS:
+                drawWave(mBigCirclePath, canvas);
+                drawWaterDismiss(canvas);
+                break;
+            case CIRCLE_ANIMATE:
+                break;
+            case MAKE_TICK:
+                break;
+        }
     }
 
     private void drawWaterDismiss(Canvas canvas) {
         int top = mWaterDismissDelta;
         RectF rectF = new RectF(mWidth / 2 - WATER_WIDTH / 2, top, mWidth / 2 + WATER_WIDTH / 2, mHeight - 10);
-        mWaterFallPaint.setColor(Color.RED);
+        mWaterFallPaint.setColor(Color.parseColor(END_COLOR));
         canvas.drawRect(rectF, mWaterFallPaint);
         mWaterDismissDelta += 50;
         if (mWaterDismissDelta <= mHeight - 10) {
             postInvalidate();
+        } else {
+            mState = LiquidState.CIRCLE_ANIMATE;
         }
     }
 
     private void drawWaterFall(Canvas canvas) {
         int bottom = mWaterFallDelta;
         RectF rectF = new RectF(mWidth / 2 - WATER_WIDTH / 2, 0, mWidth / 2 + WATER_WIDTH / 2, bottom);
+        if (mWaterFillRatio < 0.8) {
+            mWaterFallPaint.setColor(Color.parseColor(CommonUtil.caculateColor(BEGIN_COLOR, MIDDLE_COLOR, (float) (mWaterFillRatio / 0.8))));
+        } else if (mWaterFillRatio <= 1.0 && mWaterFillRatio > 0.8) {
+            mWaterFallPaint.setColor(Color.parseColor(CommonUtil.caculateColor(MIDDLE_COLOR, END_COLOR, (float) ((mWaterFillRatio - 0.8) / 0.2))));
+        }
         canvas.drawRect(rectF, mWaterFallPaint);
         mWaterFallDelta += 50;
         if (mWaterFallDelta <= mHeight - 10) {
+            postInvalidate();
+        } else if (mState == LiquidState.WATER_FALL) {
+            mState = LiquidState.LIQUID_FILL;
             postInvalidate();
         }
     }
 
     private void drawWave(Path path, Canvas canvas) {
+        mBigCircleHeight = getHeight() / 2;
+        mBigCirclePath.reset();
+        mBigCirclePath.addCircle(mWidth / 2, 3 * mHeight / 4, mWidth / 2, Path.Direction.CW);
+
         mOmega = 2.0f * Math.PI / mWidth * DEFAULT_OMEGA_RATIO * mOmegaRatio;
         mPhi = mWidth * DEFAULT_PHI_RATIO + mPhiDiff;
         mAmplitude = mBigCircleHeight * DEFAULT_AMPLITUDE_RATIO;
@@ -141,15 +176,27 @@ public class LiquidView extends View {
         mWavePath.lineTo(mWidth, mHeight);
         mWavePath.close();
         path.op(mWavePath, Path.Op.INTERSECT);
+        mWaterFillRatio = mLengthDiff / (mBigCircleHeight + 3 * mAmplitude / 2);
+        if (mWaterFillRatio < 0.8) {
+            mBigCirclePaint.setColor(Color.parseColor(CommonUtil.caculateColor(BEGIN_COLOR, MIDDLE_COLOR, (float) (mWaterFillRatio / 0.8))));
+        } else if (mWaterFillRatio < 1.0 && mWaterFillRatio > 0.8) {
+            mBigCirclePaint.setColor(Color.parseColor(CommonUtil.caculateColor(MIDDLE_COLOR, END_COLOR, (float) ((mWaterFillRatio - 0.8) / 0.2))));
+        }
         canvas.drawPath(path, mBigCirclePaint);
-        //canvas.drawPath(mWavePath, mWavePaint);
-        mLengthDiff += mBigCircleHeight / 200;
-        mOmegaRatio = mLengthDiff <= (mBigCircleHeight / 2) ? 1.4 - (0.6 * mLengthDiff / mBigCircleHeight) * 2
+        mLengthDiff += mBigCircleHeight / 200.0;
+        mOmegaRatio = mLengthDiff <= (mBigCircleHeight / 2.0) ? 1.4 - (0.6 * mLengthDiff / mBigCircleHeight) * 2
                 : 1.4 - (0.6 * (mBigCircleHeight - mLengthDiff) / mBigCircleHeight) * 2;
         mPhiDiff += mOmega * 30 * (1 - (0.9 * mLengthDiff / mBigCircleHeight));
-        if (mLength >= -mAmplitude) {
+        if (mLength >= mHeight / 2.0 - mAmplitude) {
+            postInvalidate();
+        } else if (mState == LiquidState.LIQUID_FILL) {
+            mState = LiquidState.WATER_DISMISS;
             postInvalidate();
         }
+    }
+
+    enum LiquidState {
+        WATER_FALL, LIQUID_FILL, WATER_DISMISS, CIRCLE_ANIMATE, MAKE_TICK
     }
 }
 
