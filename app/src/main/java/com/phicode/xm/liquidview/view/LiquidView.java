@@ -199,11 +199,11 @@ public class LiquidView extends View {
 
     private void drawWaterDismiss(Canvas canvas) {
         int top = mWaterDismissDelta;
-        RectF rectF = new RectF(mWidth / 2 - WATER_WIDTH / 2, top, mWidth / 2 + WATER_WIDTH / 2, mHeight - 10);
+        RectF rectF = new RectF(mWidth / 2 - WATER_WIDTH / 2, top, mWidth / 2 + WATER_WIDTH / 2, mHeight - mBigCircleHeight + 10);
         mWaterFallPaint.setColor(Color.parseColor(END_COLOR));
         canvas.drawRect(rectF, mWaterFallPaint);
         mWaterDismissDelta += 50;
-        if (mWaterDismissDelta <= mHeight - 10) {
+        if (mWaterDismissDelta <= mHeight - mBigCircleHeight + 10) {
             postInvalidate();
         } else {
             mState = LiquidState.CIRCLE_ANIMATE;
