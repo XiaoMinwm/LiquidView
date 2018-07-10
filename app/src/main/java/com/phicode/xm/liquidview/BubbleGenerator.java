@@ -38,10 +38,18 @@ public class BubbleGenerator extends Thread {
         isGenerate = generate;
     }
 
+    public boolean isInstantAndOnce() {
+        return isInstantAndOnce;
+    }
+
+    public void setInstantAndOnce(boolean instantAndOnce) {
+        isInstantAndOnce = instantAndOnce;
+    }
+
     @Override
     public void run() {
         super.run();
-        while (isRunning) {
+        while (true) {
             if (!isGenerate) {
                 continue;
             }
@@ -53,7 +61,6 @@ public class BubbleGenerator extends Thread {
                 e.printStackTrace();
             }
             Random random = new Random();
-            float nextFloat = random.nextFloat();
             int num = random.nextInt(4) + 1;
             ArrayList<Bubble> bubbles = new ArrayList<>();
             for (int i = 0; i < num; i++) {

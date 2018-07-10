@@ -13,6 +13,7 @@ import android.support.annotation.Nullable;
 import android.util.AttributeSet;
 import android.view.View;
 import android.view.animation.AccelerateDecelerateInterpolator;
+import android.view.animation.AnticipateOvershootInterpolator;
 
 import com.phicode.xm.liquidview.BubbleGenerator;
 import com.phicode.xm.liquidview.model.Bubble;
@@ -30,12 +31,14 @@ public class LiquidView extends View {
     private static final double DEFAULT_LENGTH_RATIO = 0.5;
     //水注宽度
     private static final int WATER_WIDTH = 40;
+    //抖动距离
+    private static final int SHAKE_HEIGHT = 150;
     //动画初始到结束颜色
     private static final String BEGIN_COLOR = "#FFFF4500";
     public static final String MIDDLE_COLOR = "#FFFFD700";
     public static final String END_COLOR = "#FF1BCC48";
 
-    private static final int DEFAULT_BUBBLE_BOUNCE_HEIGHT = 100;
+    private static final int DEFAULT_BUBBLE_BOUNCE_HEIGHT = 150;
 
     private int mWidth;
     private int mHeight;
@@ -66,14 +69,19 @@ public class LiquidView extends View {
     private float mBeginY;
     private int mCurrentColor;
 
+    //水柱下落和消失参数
     private int mWaterFallDelta = 0;
     private int mWaterDismissDelta = 0;
+
+    //view的抖动效果
+    private float mShakeAnimatorValue = 0;
 
     private LiquidState mState;
     private List<Bubble> mBubbles;
     private BubbleGenerator mBubbleGenerator = new BubbleGenerator();
 
-    private ValueAnimator mValueAnimator = ValueAnimator.ofFloat(0, 1);
+    private ValueAnimator mBubbleAnimator = ValueAnimator.ofFloat(0, 1);
+    private ValueAnimator mShakeAnimator = ValueAnimator.ofFloat(0, 1);
 
     public LiquidView(Context context) {
         this(context, null);
@@ -92,17 +100,29 @@ public class LiquidView extends View {
     private Handler mHandler = new Handler(Looper.myLooper());
 
     private void init() {
-        mValueAnimator.setDuration(700);
-        mValueAnimator.setInterpolator(new AccelerateDecelerateInterpolator());
-        mValueAnimator.addUpdateListener(new ValueAnimator.AnimatorUpdateListener() {
+        mBubbleAnimator.setDuration(700);
+        mBubbleAnimator.setInterpolator(new AccelerateDecelerateInterpolator());
+        mBubbleAnimator.addUpdateListener(new ValueAnimator.AnimatorUpdateListener() {
             @Override
             public void onAnimationUpdate(ValueAnimator valueAnimator) {
                 float value = (float) valueAnimator.getAnimatedValue();
+                if (mBubbles == null) {
+                    return;
+                }
                 for (Bubble bubble : mBubbles) {
                     bubble.setAlpha((int) (255 * (1 - value)));
                     bubble.setBounceHeight(DEFAULT_BUBBLE_BOUNCE_HEIGHT * value);
-                    postInvalidate();
                 }
+                postInvalidate();
+            }
+        });
+        mShakeAnimator.setDuration(700);
+        mShakeAnimator.setInterpolator(new AnticipateOvershootInterpolator());
+        mShakeAnimator.addUpdateListener(new ValueAnimator.AnimatorUpdateListener() {
+            @Override
+            public void onAnimationUpdate(ValueAnimator valueAnimator) {
+                mShakeAnimatorValue = (float) valueAnimator.getAnimatedValue();
+                postInvalidate();
             }
         });
 
@@ -113,7 +133,7 @@ public class LiquidView extends View {
                 mHandler.post(new Runnable() {
                     @Override
                     public void run() {
-                        mValueAnimator.start();
+                        mBubbleAnimator.start();
                     }
                 });
             }
@@ -171,26 +191,43 @@ public class LiquidView extends View {
                 drawBubble(canvas);
                 break;
             case WATER_DISMISS:
-                mBubbleGenerator.setRunning(false);
+                mBubbleGenerator.setGenerate(false);
+                mBubbles = null;
                 drawWave(mBigCirclePath, canvas);
                 drawWaterDismiss(canvas);
                 break;
             case CIRCLE_ANIMATE:
+                mBubbleGenerator.setInstantAndOnce(true);
+                mBubbleGenerator.setGenerate(true);
+                shakeView(canvas);
+                drawBubble(canvas);
+                drawWave(mBigCirclePath, canvas);
                 break;
             case MAKE_TICK:
                 break;
         }
     }
 
+    private void shakeView(Canvas canvas) {
+        canvas.translate(0, -mShakeAnimatorValue * SHAKE_HEIGHT);
+    }
+
     private void drawBubble(Canvas canvas) {
-        if (mLength > mHeight || mLength < mHeight / 2 || mBubbles == null) {
-            return;
+        if (!mBubbleGenerator.isInstantAndOnce()) {
+            if (mLength > mHeight || mLength < mHeight / 2 || mBubbles == null) {
+                return;
+            }
         }
-        float deltaH = (float) Math.abs((mWidth / 2 - (mHeight - mLength)));
+        float deltaH;
+        if (mBubbleGenerator.isInstantAndOnce()) {
+            deltaH = mWidth / 2 - 10;
+        } else {
+            deltaH = (float) Math.abs((mWidth / 2 - (mHeight - mLength)));
+        }
         float bubbleRange = (float) Math.sqrt((mWidth / 2) * (mWidth / 2) - deltaH * deltaH);
         for (Bubble bubble : mBubbles) {
             float bubbleX = bubble.getXMiddleRatio() * bubbleRange * 1.5f + mWidth / 2;
-            float bubbleY = (float) (mAmplitude * Math.sin(mOmega * bubbleX + mPhi) + mLength);
+            float bubbleY = !mBubbleGenerator.isInstantAndOnce() ? (float) (mAmplitude * Math.sin(mOmega * bubbleX + mPhi) + mLength) : mHeight / 2 - SHAKE_HEIGHT / 2;
             mBubblePaint.setColor(mCurrentColor);
             mBubblePaint.setAlpha(bubble.getAlpha());
             canvas.drawCircle(bubbleX < mWidth / 2 ? (bubbleX - bubble.getBounceHeight() * 0.2f) : (bubbleX + bubble.getBounceHeight() * 0.2f), bubbleY - bubble.getBounceHeight(), bubble.getSize(), mBubblePaint);
@@ -206,6 +243,7 @@ public class LiquidView extends View {
         if (mWaterDismissDelta <= mHeight - mBigCircleHeight + 10) {
             postInvalidate();
         } else {
+            mShakeAnimator.start();
             mState = LiquidState.CIRCLE_ANIMATE;
         }
     }
