@@ -192,15 +192,12 @@ public class LiquidView extends View {
                 break;
             case WATER_DISMISS:
                 mBubbleGenerator.setGenerate(false);
-                mBubbles = null;
                 drawWave(mBigCirclePath, canvas);
                 drawWaterDismiss(canvas);
                 break;
             case CIRCLE_ANIMATE:
-                mBubbleGenerator.setInstantAndOnce(true);
-                mBubbleGenerator.setGenerate(true);
-                shakeView(canvas);
                 drawBubble(canvas);
+                shakeView(canvas);
                 drawWave(mBigCirclePath, canvas);
                 break;
             case MAKE_TICK:
@@ -214,23 +211,23 @@ public class LiquidView extends View {
 
     private void drawBubble(Canvas canvas) {
         if (!mBubbleGenerator.isInstantAndOnce()) {
-            if (mLength > mHeight || mLength < mHeight / 2 || mBubbles == null) {
+            if (mLength > mHeight || mLength < mHeight / 2.0 || mBubbles == null) {
                 return;
             }
         }
         float deltaH;
         if (mBubbleGenerator.isInstantAndOnce()) {
-            deltaH = mWidth / 2 - 10;
+            deltaH = mWidth / 2f - 10f;
         } else {
-            deltaH = (float) Math.abs((mWidth / 2 - (mHeight - mLength)));
+            deltaH = (float) Math.abs((mWidth / 2.0 - (mHeight - mLength)));
         }
-        float bubbleRange = (float) Math.sqrt((mWidth / 2) * (mWidth / 2) - deltaH * deltaH);
+        float bubbleRange = (float) Math.sqrt((mWidth / 2.0) * (mWidth / 2.0) - deltaH * deltaH);
         for (Bubble bubble : mBubbles) {
-            float bubbleX = bubble.getXMiddleRatio() * bubbleRange * 1.5f + mWidth / 2;
-            float bubbleY = !mBubbleGenerator.isInstantAndOnce() ? (float) (mAmplitude * Math.sin(mOmega * bubbleX + mPhi) + mLength) : mHeight / 2 - SHAKE_HEIGHT / 2;
+            float bubbleX = bubble.getXMiddleRatio() * bubbleRange * 1.5f + mWidth / 2f;
+            float bubbleY = !mBubbleGenerator.isInstantAndOnce() ? (float) (mAmplitude * Math.sin(mOmega * bubbleX + mPhi) + mLength) : mHeight / 2f;
             mBubblePaint.setColor(mCurrentColor);
             mBubblePaint.setAlpha(bubble.getAlpha());
-            canvas.drawCircle(bubbleX < mWidth / 2 ? (bubbleX - bubble.getBounceHeight() * 0.2f) : (bubbleX + bubble.getBounceHeight() * 0.2f), bubbleY - bubble.getBounceHeight(), bubble.getSize(), mBubblePaint);
+            canvas.drawCircle(bubbleX < mWidth / 2.0 ? (bubbleX - bubble.getBounceHeight() * 0.2f) : (bubbleX + bubble.getBounceHeight() * 0.2f), bubbleY - bubble.getBounceHeight(), bubble.getSize(), mBubblePaint);
         }
     }
 
@@ -243,6 +240,8 @@ public class LiquidView extends View {
         if (mWaterDismissDelta <= mHeight - mBigCircleHeight + 10) {
             postInvalidate();
         } else {
+            mBubbleGenerator.setInstantAndOnce(true);
+            mBubbleGenerator.setGenerate(true);
             mShakeAnimator.start();
             mState = LiquidState.CIRCLE_ANIMATE;
         }

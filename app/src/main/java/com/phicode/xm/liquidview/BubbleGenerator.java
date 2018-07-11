@@ -61,7 +61,7 @@ public class BubbleGenerator extends Thread {
                 e.printStackTrace();
             }
             Random random = new Random();
-            int num = random.nextInt(4) + 1;
+            int num = !isInstantAndOnce ? random.nextInt(4) + 1 : random.nextInt(2) + 3;
             ArrayList<Bubble> bubbles = new ArrayList<>();
             for (int i = 0; i < num; i++) {
                 Bubble bubble = new Bubble();
