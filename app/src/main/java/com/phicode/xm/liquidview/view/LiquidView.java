@@ -6,6 +6,7 @@ import android.graphics.Canvas;
 import android.graphics.Color;
 import android.graphics.Paint;
 import android.graphics.Path;
+import android.graphics.PathMeasure;
 import android.graphics.RectF;
 import android.os.Handler;
 import android.os.Looper;
@@ -51,10 +52,15 @@ public class LiquidView extends View {
     private Paint mBigCirclePaint;
     //波浪画笔
     private Paint mWavePaint;
+    //气泡画笔
     private Paint mBubblePaint;
+    //对勾画笔
+    private Paint mTickPaint;
 
     private Path mWavePath;
     private Path mBigCirclePath;
+    private Path mTickPath;
+    private PathMeasure mTickPathMeasure;
 
     //y=Asin(ωx+φ)+h
     private double mOmega;
@@ -75,6 +81,7 @@ public class LiquidView extends View {
 
     //view的抖动效果
     private float mShakeAnimatorValue = 0;
+    private float mTickAnimatorValue = 0;
 
     private LiquidState mState;
     private List<Bubble> mBubbles;
@@ -82,6 +89,7 @@ public class LiquidView extends View {
 
     private ValueAnimator mBubbleAnimator = ValueAnimator.ofFloat(0, 1);
     private ValueAnimator mShakeAnimator = ValueAnimator.ofFloat(0, 1);
+    private ValueAnimator mTickAnimator = ValueAnimator.ofFloat(0, 1);
 
     public LiquidView(Context context) {
         this(context, null);
@@ -139,6 +147,16 @@ public class LiquidView extends View {
             }
         });
         mBubbleGenerator.start();
+
+        mTickAnimator.setDuration(1000);
+        mTickAnimator.setInterpolator(new AnticipateOvershootInterpolator());
+        mTickAnimator.addUpdateListener(new ValueAnimator.AnimatorUpdateListener() {
+            @Override
+            public void onAnimationUpdate(ValueAnimator valueAnimator) {
+                mTickAnimatorValue = (float) valueAnimator.getAnimatedValue();
+                postInvalidate();
+            }
+        });
     }
 
     /**
@@ -169,8 +187,19 @@ public class LiquidView extends View {
         mBubblePaint.setAntiAlias(true);
         mBubblePaint.setStyle(Paint.Style.FILL);
 
+        mTickPaint = new Paint();
+        mTickPaint.setDither(true);
+        mTickPaint.setAntiAlias(true);
+        mTickPaint.setStyle(Paint.Style.STROKE);
+        mTickPaint.setStrokeCap(Paint.Cap.ROUND);
+        mTickPaint.setStrokeJoin(Paint.Join.ROUND);
+        mTickPaint.setColor(Color.WHITE);
+        mTickPaint.setStrokeWidth(20);
+
         mWavePath = new Path();
         mBigCirclePath = new Path();
+        mTickPath = new Path();
+        mTickPathMeasure = new PathMeasure();
 
         mState = LiquidState.WATER_FALL;
     }
@@ -180,7 +209,6 @@ public class LiquidView extends View {
         super.onDraw(canvas);
         mWidth = getWidth();
         mHeight = getHeight();
-
         switch (mState) {
             case WATER_FALL:
                 drawWaterFall(canvas);
@@ -201,8 +229,26 @@ public class LiquidView extends View {
                 drawWave(mBigCirclePath, canvas);
                 break;
             case MAKE_TICK:
+                shakeView(canvas);
+                drawWave(mBigCirclePath, canvas);
+                drawTick(canvas);
                 break;
         }
+    }
+
+    private void shrinkView(Canvas canvas) {
+        canvas.scale((1f - mTickAnimatorValue) / 2f + 0.75f, (1f - mTickAnimatorValue) / 2f + 0.75f);
+    }
+
+    private void drawTick(Canvas canvas) {
+        float tickLeftLength = (mWidth / 2f / 2.4f);
+        mTickPath.moveTo(tickLeftLength * 1.4f, mHeight - mBigCircleHeight / 2);
+        mTickPath.lineTo(tickLeftLength * (1.4f + (float) Math.sqrt(2) / 2f), (float) (mHeight - mBigCircleHeight / 2f + tickLeftLength * Math.sqrt(2) / 2f));
+        mTickPath.lineTo((float) (tickLeftLength * (1.4f + (float) Math.sqrt(2) / 2f) + tickLeftLength * 2f * Math.sin(50f / 180f * Math.PI)), (float) (mHeight - mBigCircleHeight / 2f + tickLeftLength * Math.sqrt(2) / 2f) - (float) (tickLeftLength * 2f * Math.cos(50f / 180f * Math.PI)));
+        Path dst = new Path();
+        mTickPathMeasure.setPath(mTickPath, false);
+        mTickPathMeasure.getSegment(0, mTickPathMeasure.getLength() * mTickAnimatorValue * 0.9f, dst, true);
+        canvas.drawPath(dst, mTickPaint);
     }
 
     private void shakeView(Canvas canvas) {
@@ -268,9 +314,15 @@ public class LiquidView extends View {
     }
 
     private void drawWave(Path path, Canvas canvas) {
-        mBigCircleHeight = getHeight() / 2;
+        if (mTickAnimatorValue > 0.5) {
+            if (mTickAnimatorValue <= 1) {
+                mBigCircleHeight = (int) (getHeight() / 2 * ((1f - mTickAnimatorValue) / 4f + 0.875f));
+            }
+        } else {
+            mBigCircleHeight = getHeight() / 2;
+        }
         mBigCirclePath.reset();
-        mBigCirclePath.addCircle(mWidth / 2, 3 * mHeight / 4, mWidth / 2, Path.Direction.CW);
+        mBigCirclePath.addCircle(mWidth / 2, 3 * mHeight / 4, mBigCircleHeight / 2, Path.Direction.CW);
 
         mOmega = 2.0f * Math.PI / mWidth * DEFAULT_OMEGA_RATIO * mOmegaRatio;
         mPhi = mWidth * DEFAULT_PHI_RATIO + mPhiDiff;
@@ -304,6 +356,10 @@ public class LiquidView extends View {
             postInvalidate();
         } else if (mState == LiquidState.LIQUID_FILL) {
             mState = LiquidState.WATER_DISMISS;
+            postInvalidate();
+        } else if (mState == LiquidState.CIRCLE_ANIMATE && !mShakeAnimator.isRunning()) {
+            mState = LiquidState.MAKE_TICK;
+            mTickAnimator.start();
             postInvalidate();
         }
     }
