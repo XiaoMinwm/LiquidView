@@ -10,7 +10,6 @@ import android.graphics.PathMeasure;
 import android.graphics.RectF;
 import android.os.Handler;
 import android.os.Looper;
-import android.support.annotation.Nullable;
 import android.util.AttributeSet;
 import android.view.View;
 import android.view.animation.AccelerateDecelerateInterpolator;
@@ -20,13 +19,15 @@ import com.phicode.xm.liquidview.BubbleGenerator;
 import com.phicode.xm.liquidview.model.Bubble;
 import com.phicode.xm.liquidview.util.CommonUtil;
 
+import org.jetbrains.annotations.Nullable;
+
 import java.util.List;
 
 public class LiquidView extends View {
     private static final String TAG = "LiquidView";
     //水波正弦参数
     private static final int DEFAULT_AMPLITUDE = 10;
-    private static final double DEFAULT_OMEGA_RATIO = 1;
+    private static final double DEFAULT_OMEGA_RATIO = 0.8;
     private static final double DEFAULT_AMPLITUDE_RATIO = 0.05;
     private static final double DEFAULT_PHI_RATIO = 0.5;
     private static final double DEFAULT_LENGTH_RATIO = 0.5;
@@ -71,8 +72,6 @@ public class LiquidView extends View {
     private double mPhiDiff = 0;
     private double mLengthDiff = 0;
     private double mWaterFillRatio = 0;
-    private float mBeginX;
-    private float mBeginY;
     private int mCurrentColor;
 
     //水柱下落和消失参数
@@ -230,6 +229,7 @@ public class LiquidView extends View {
                 break;
             case MAKE_TICK:
                 shakeView(canvas);
+                shrinkView(canvas);
                 drawWave(mBigCirclePath, canvas);
                 drawTick(canvas);
                 break;
@@ -237,7 +237,10 @@ public class LiquidView extends View {
     }
 
     private void shrinkView(Canvas canvas) {
-        canvas.scale((1f - mTickAnimatorValue) / 2f + 0.75f, (1f - mTickAnimatorValue) / 2f + 0.75f);
+        if (mTickAnimatorValue < 0.5) {
+            return;
+        }
+        canvas.scale((1f - (mTickAnimatorValue > 1 ? 1f : mTickAnimatorValue)) / 4f + 0.875f, (1f - (mTickAnimatorValue > 1 ? 1f : mTickAnimatorValue)) / 4f + 0.875f, mWidth / 2, mHeight - mBigCircleHeight / 2);
     }
 
     private void drawTick(Canvas canvas) {
@@ -256,10 +259,8 @@ public class LiquidView extends View {
     }
 
     private void drawBubble(Canvas canvas) {
-        if (!mBubbleGenerator.isInstantAndOnce()) {
-            if (mLength > mHeight || mLength < mHeight / 2.0 || mBubbles == null) {
-                return;
-            }
+        if (!mBubbleGenerator.isInstantAndOnce() && (mLength > mHeight || mLength < mHeight / 2.0 || mBubbles == null)) {
+            return;
         }
         float deltaH;
         if (mBubbleGenerator.isInstantAndOnce()) {
@@ -273,7 +274,7 @@ public class LiquidView extends View {
             float bubbleY = !mBubbleGenerator.isInstantAndOnce() ? (float) (mAmplitude * Math.sin(mOmega * bubbleX + mPhi) + mLength) : mHeight / 2f;
             mBubblePaint.setColor(mCurrentColor);
             mBubblePaint.setAlpha(bubble.getAlpha());
-            canvas.drawCircle(bubbleX < mWidth / 2.0 ? (bubbleX - bubble.getBounceHeight() * 0.2f) : (bubbleX + bubble.getBounceHeight() * 0.2f), bubbleY - bubble.getBounceHeight(), bubble.getSize(), mBubblePaint);
+            canvas.drawCircle(bubbleX < mWidth / 2.0 ? (bubbleX - bubble.getBounceHeight() * 0.2f) : (bubbleX + bubble.getBounceHeight() * 0.2f), bubbleY - bubble.getBounceHeight(), bubble.getSize() * (1 + bubble.getBounceHeight() / DEFAULT_BUBBLE_BOUNCE_HEIGHT / 2), mBubblePaint);
         }
     }
 
@@ -314,20 +315,14 @@ public class LiquidView extends View {
     }
 
     private void drawWave(Path path, Canvas canvas) {
-        if (mTickAnimatorValue > 0.5) {
-            if (mTickAnimatorValue <= 1) {
-                mBigCircleHeight = (int) (getHeight() / 2 * ((1f - mTickAnimatorValue) / 4f + 0.875f));
-            }
-        } else {
-            mBigCircleHeight = getHeight() / 2;
-        }
+        mBigCircleHeight = getHeight() / 2;
         mBigCirclePath.reset();
         mBigCirclePath.addCircle(mWidth / 2, 3 * mHeight / 4, mBigCircleHeight / 2, Path.Direction.CW);
 
         mOmega = 2.0f * Math.PI / mWidth * DEFAULT_OMEGA_RATIO * mOmegaRatio;
         mPhi = mWidth * DEFAULT_PHI_RATIO + mPhiDiff;
         mAmplitude = mBigCircleHeight * DEFAULT_AMPLITUDE_RATIO;
-        mLength = mHeight + mAmplitude / 2 - mLengthDiff;
+        mLength = mHeight - mLengthDiff;
         final int endX = mWidth;
         mWavePath.reset();
         mWavePath.moveTo(0, mHeight);
